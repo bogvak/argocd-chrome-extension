@@ -105,7 +105,7 @@
     );
   }
 
-  function applyFilterNow() {
+  function applyFilterNow(scrollToFirst) {
     const keep = computeKeepSet(selectedKind);
     const nodeEls = document.querySelectorAll(NODE_SELECTOR);
 
@@ -115,14 +115,32 @@
       el.style.display = "";
     });
 
+    let firstVisible = null; // { rect } of the topmost-then-leftmost kept node
+    function trackFirstVisible(el) {
+      if (!scrollToFirst) return;
+      const rect = el.getBoundingClientRect();
+      if (
+        !firstVisible ||
+        rect.top < firstVisible.rect.top ||
+        (rect.top === firstVisible.rect.top && rect.left < firstVisible.rect.left)
+      ) {
+        firstVisible = { el, rect };
+      }
+    }
+
     const hiddenRects = [];
     nodeEls.forEach((el) => {
-      if (!keep) return;
+      if (!keep) {
+        trackFirstVisible(el);
+        return;
+      }
       const info = parseTitle(el.getAttribute("title"));
       const isHidden = !info || !keep.has(nodeKey(info));
       if (isHidden) {
         hiddenRects.push(el.getBoundingClientRect());
         el.style.display = "none";
+      } else {
+        trackFirstVisible(el);
       }
     });
 
@@ -142,14 +160,29 @@
       });
       if (touchesHidden) edgeEl.style.display = "none";
     });
+
+    // Hidden nodes are removed from ArgoCD's absolutely-positioned canvas
+    // layout, not reflowed, so the scroll container can be left showing a
+    // blank area where the old selection used to be. Snap it back to
+    // whichever kept node is now topmost-leftmost.
+    if (firstVisible) {
+      firstVisible.el.scrollIntoView({ block: "nearest", inline: "nearest" });
+    }
   }
 
-  function applyFilter() {
+  // scrollAfter: true only for an actual user-driven filter change, not for
+  // routine re-applies (tree re-render, poll) — otherwise the view would
+  // keep jumping under the user on every background refresh.
+  let pendingScrollAfterApply = false;
+  function applyFilter(scrollAfter) {
+    if (scrollAfter) pendingScrollAfterApply = true;
     if (applyScheduled) return;
     applyScheduled = true;
     requestAnimationFrame(() => {
       applyScheduled = false;
-      applyFilterNow();
+      const scrollToFirst = pendingScrollAfterApply;
+      pendingScrollAfterApply = false;
+      applyFilterNow(scrollToFirst);
     });
   }
 
@@ -283,7 +316,7 @@
         removeCustomKind(k);
         renderKindOptions(select);
         renderCustomKindList(listEl, select);
-        applyFilter();
+        applyFilter(true);
       });
       li.appendChild(removeBtn);
 
@@ -329,7 +362,7 @@
     renderKindOptions(select);
     select.addEventListener("change", () => {
       selectedKind = select.value;
-      applyFilter();
+      applyFilter(true);
     });
     body.appendChild(select);
 

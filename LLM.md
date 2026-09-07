@@ -55,6 +55,8 @@ ArgoCD's tree view DOM has **no data attributes** for a node's kind, name, names
 
   The overlap test is a simple padded axis-aligned bounding-box check (`rectsOverlap` in `content.js`), computed after resetting everything to visible each pass (hidden elements collapse to a zero rect and can't be measured, so nodes/edges are always reset to visible, measured, then re-hidden every `applyFilterNow()` call).
 
+- **Hiding nodes leaves a blank gap, not a reflow.** ArgoCD's tree is dagre-laid-out with absolute positioning, so `display:none`-ing a node doesn't shift its siblings to fill the space — the scroll container can end up showing empty canvas after switching kinds. Fix: `applyFilterNow(scrollToFirst)` tracks the topmost-then-leftmost node that stays visible and, when `scrollToFirst` is true, calls `.scrollIntoView({block:"nearest", inline:"nearest"})` on it after hide/show is applied. `scrollToFirst` is only set on an actual user-driven filter change (kind `<select>` change, or removing the currently-selected custom kind) via `applyFilter(true)` — routine re-applies from the `MutationObserver`/tree-poll pass `applyFilter()` with no arg, so the view doesn't jump around on background refreshes. The flag is tracked via a module-level `pendingScrollAfterApply` since `applyFilter` itself is rAF-debounced.
+
 - Because ArgoCD is a client-rendered SPA, `content.js` also: polls `location.href` (no real navigation event fires on in-app app switches) to know when to re-fetch the tree, and runs a `MutationObserver` on `document.body` to reapply the filter as the tree view re-renders (health/status polling, expand/collapse, etc.).
 
 ## Widget UI
