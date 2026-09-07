@@ -1,0 +1,88 @@
+body {
+  width: 260px;
+  margin: 0;
+  padding: 12px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 13px;
+  color: #222;
+}
+
+h1 {
+  font-size: 14px;
+  margin: 0 0 8px;
+}
+
+hr {
+  border: none;
+  border-top: 1px solid #e2e5e9;
+  margin: 10px 0;
+}
+
+.hint {
+  color: #666;
+  font-size: 11px;
+  margin: 0 0 6px;
+}
+
+.row {
+  display: flex;
+  gap: 6px;
+}
+
+input[type="text"] {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 6px;
+  border: 1px solid #ccd2d9;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+button {
+  padding: 5px 10px;
+  border: 1px solid #0d3a5c;
+  border-radius: 4px;
+  background: #0d3a5c;
+  color: #fff;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+button:hover {
+  background: #124a73;
+}
+
+button.secondary {
+  background: #fff;
+  color: #0d3a5c;
+}
+
+button.secondary:hover {
+  background: #f0f4f8;
+}
+
+.error {
+  color: #c0392b;
+  font-size: 11px;
+  margin: 6px 0 0;
+}
+
+#hostList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+#hostList li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 4px 0;
+  font-size: 12px;
+}
+
+#hostList li button {
+  padding: 2px 8px;
+  font-size: 11px;
+}

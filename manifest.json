@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "ArgoCD UI Enhancer",
+  "version": "0.2.0",
+  "description": "Filter ArgoCD resource tree by kind, keeping children of the selected kind. Add your own ArgoCD host from the toolbar popup.",
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "ArgoCD UI Enhancer"
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "permissions": ["storage", "scripting"],
+  "optional_host_permissions": ["https://*/*"]
+}

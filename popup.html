@@ -1,0 +1,37 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>ArgoCD UI Enhancer</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <h1>ArgoCD UI Enhancer</h1>
+
+    <section id="currentSiteSection">
+      <p id="currentSiteLabel"></p>
+      <button id="enableCurrentBtn" type="button">Enable on this site</button>
+    </section>
+
+    <hr />
+
+    <section>
+      <p class="hint">Add an ArgoCD host manually:</p>
+      <div class="row">
+        <input id="hostInput" type="text" placeholder="argocd.example.com" />
+        <button id="addBtn" type="button">Add</button>
+      </div>
+      <p id="errorMsg" class="error" hidden></p>
+    </section>
+
+    <hr />
+
+    <section>
+      <p class="hint">Enabled hosts</p>
+      <ul id="hostList"></ul>
+      <p id="emptyMsg" class="hint">None yet.</p>
+    </section>
+
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>

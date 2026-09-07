@@ -1,0 +1,74 @@
+#argocd-ext-kind-filter {
+  position: fixed;
+  top: 60px;
+  right: 16px;
+  z-index: 9999;
+  width: 190px;
+  background: #ffffff;
+  border: 1px solid #e2e5e9;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 12px;
+  color: #333;
+  overflow: hidden;
+  user-select: none;
+}
+
+#argocd-ext-kind-filter.is-collapsed .argocd-ext-kf__body {
+  display: none;
+}
+
+.argocd-ext-kf__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 6px 6px 6px 10px;
+  background: #0d3a5c;
+  color: #ffffff;
+  cursor: grab;
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+}
+
+.argocd-ext-kf__header:active {
+  cursor: grabbing;
+}
+
+.argocd-ext-kf__title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.argocd-ext-kf__collapse {
+  flex: none;
+  background: transparent;
+  border: none;
+  color: #ffffff;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  padding: 3px 6px;
+  border-radius: 4px;
+}
+
+.argocd-ext-kf__collapse:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.argocd-ext-kf__body {
+  padding: 8px 10px 10px;
+}
+
+.argocd-ext-kf__body select {
+  width: 100%;
+  font-size: 12px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  border: 1px solid #ccd2d9;
+  background: #ffffff;
+  color: #333;
+}
