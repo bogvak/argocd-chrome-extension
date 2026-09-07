@@ -11,7 +11,7 @@ This extension adds its own kind filter that understands the hierarchy: pick a k
 ## Features
 
 - Floating, draggable "Kind filter" widget on the Application resource tree view, with a collapse toggle. Position and collapsed state are remembered per ArgoCD instance.
-- Kind filter for v1: `All`, `Deployment`, `Service`, `ConfigMap` — keeping each kept resource's children (ReplicaSets, Pods, etc.) visible, including their connector lines.
+- Kind filter for v1: `All`, `Deployment`, `Service`, `ConfigMap`, `StatefulSet` — keeping each kept resource's children (ReplicaSets, Pods, etc.) visible, including their connector lines. Need another kind? Add it yourself from the widget — custom kinds are remembered per ArgoCD instance.
 - Works with any ArgoCD instance you choose — nothing is hardcoded. You opt in per host from the toolbar popup, and Chrome only ever grants the extension access to the hosts you explicitly add.
 
 ## Installing (manual, for now)

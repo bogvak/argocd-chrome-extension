@@ -1,5 +1,5 @@
 (function () {
-  const KINDS = ["All", "Deployment", "Service", "ConfigMap"];
+  const KINDS = ["All", "Deployment", "Service", "ConfigMap", "StatefulSet"];
   const NODE_SELECTOR = ".application-resource-tree__node";
   const EDGE_WRAPPER_SELECTOR = ".application-resource-tree__edge";
   const EDGE_SELECTOR = ".application-resource-tree__line";
@@ -7,8 +7,10 @@
   const POLL_MS = 700;
   const POS_STORAGE_KEY = "argocd-ext-kf-pos";
   const COLLAPSED_STORAGE_KEY = "argocd-ext-kf-collapsed";
+  const CUSTOM_KINDS_STORAGE_KEY = "argocd-ext-kf-custom-kinds";
 
   let selectedKind = "All";
+  let customKinds = [];
   let treeData = null; // { allNodes, childrenByParentKey }
   let lastAppKey = null;
   let lastHref = location.href;
@@ -191,6 +193,26 @@
     }
   }
 
+  function getAllKinds() {
+    return KINDS.concat(customKinds);
+  }
+
+  function addCustomKind(rawKind) {
+    const kind = (rawKind || "").trim();
+    if (!kind) return false;
+    const exists = getAllKinds().some((k) => k.toLowerCase() === kind.toLowerCase());
+    if (exists) return false;
+    customKinds.push(kind);
+    saveJSON(CUSTOM_KINDS_STORAGE_KEY, customKinds);
+    return true;
+  }
+
+  function removeCustomKind(kind) {
+    customKinds = customKinds.filter((k) => k !== kind);
+    saveJSON(CUSTOM_KINDS_STORAGE_KEY, customKinds);
+    if (selectedKind === kind) selectedKind = "All";
+  }
+
   function makeDraggable(handleEl, boxEl) {
     let dragging = false;
     let startX = 0;
@@ -230,8 +252,49 @@
     handleEl.addEventListener("pointercancel", stopDragging);
   }
 
+  function renderKindOptions(select) {
+    const prevValue = select.value || selectedKind;
+    select.innerHTML = "";
+    for (const k of getAllKinds()) {
+      const opt = document.createElement("option");
+      opt.value = k;
+      opt.textContent = k === "All" ? "All kinds" : k;
+      select.appendChild(opt);
+    }
+    select.value = getAllKinds().includes(prevValue) ? prevValue : "All";
+    selectedKind = select.value;
+  }
+
+  function renderCustomKindList(listEl, select) {
+    listEl.innerHTML = "";
+    for (const k of customKinds) {
+      const li = document.createElement("li");
+
+      const span = document.createElement("span");
+      span.textContent = k;
+      li.appendChild(span);
+
+      const removeBtn = document.createElement("button");
+      removeBtn.type = "button";
+      removeBtn.className = "argocd-ext-kf__kind-remove";
+      removeBtn.textContent = "×";
+      removeBtn.title = `Remove ${k}`;
+      removeBtn.addEventListener("click", () => {
+        removeCustomKind(k);
+        renderKindOptions(select);
+        renderCustomKindList(listEl, select);
+        applyFilter();
+      });
+      li.appendChild(removeBtn);
+
+      listEl.appendChild(li);
+    }
+  }
+
   function createWidget() {
     if (document.getElementById("argocd-ext-kind-filter")) return;
+
+    customKinds = loadJSON(CUSTOM_KINDS_STORAGE_KEY) || [];
 
     const box = document.createElement("div");
     box.id = "argocd-ext-kind-filter";
@@ -263,18 +326,46 @@
     body.className = "argocd-ext-kf__body";
 
     const select = document.createElement("select");
-    for (const k of KINDS) {
-      const opt = document.createElement("option");
-      opt.value = k;
-      opt.textContent = k === "All" ? "All kinds" : k;
-      select.appendChild(opt);
-    }
-    select.value = selectedKind;
+    renderKindOptions(select);
     select.addEventListener("change", () => {
       selectedKind = select.value;
       applyFilter();
     });
     body.appendChild(select);
+
+    const addRow = document.createElement("div");
+    addRow.className = "argocd-ext-kf__add-row";
+
+    const kindInput = document.createElement("input");
+    kindInput.type = "text";
+    kindInput.placeholder = "Add kind (e.g. Job)";
+    addRow.appendChild(kindInput);
+
+    const addBtn = document.createElement("button");
+    addBtn.type = "button";
+    addBtn.textContent = "+";
+    addBtn.title = "Add kind";
+    addRow.appendChild(addBtn);
+
+    const kindList = document.createElement("ul");
+    kindList.className = "argocd-ext-kf__kind-list";
+
+    function tryAddKind() {
+      if (addCustomKind(kindInput.value)) {
+        kindInput.value = "";
+        renderKindOptions(select);
+        renderCustomKindList(kindList, select);
+      }
+    }
+
+    addBtn.addEventListener("click", tryAddKind);
+    kindInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") tryAddKind();
+    });
+
+    body.appendChild(addRow);
+    body.appendChild(kindList);
+    renderCustomKindList(kindList, select);
 
     box.appendChild(body);
     if (collapsed) box.classList.add("is-collapsed");

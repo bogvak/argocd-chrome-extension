@@ -63,7 +63,7 @@ Floating panel, dark header = drag handle, ▾/▸ collapses to just the header.
 
 ## Current scope / known limitations
 
-- Kind dropdown is single-select, hardcoded list: `All / Deployment / Service / ConfigMap` (`KINDS` const in `content.js`). Multi-select and a configurable kind list are natural next steps, not built yet.
+- Kind dropdown is single-select. Hardcoded base list: `All / Deployment / Service / ConfigMap / StatefulSet` (`KINDS` const in `content.js`). Users can add their own kinds (any string matching a k8s `Kind`, e.g. `Job`, `CronJob`) via a small input+list under the dropdown in the widget — stored in `localStorage` (`argocd-ext-kf-custom-kinds`, per-origin, merged with `KINDS` at render time via `getAllKinds()`). Multi-select is a natural next step, not built yet.
 - Line-hiding is a geometric heuristic (bounding-box overlap), not a true graph lookup — a false-positive hide is theoretically possible if two unrelated branches visually cross on screen, but tree-view's column layout makes this rare in practice. Watch for reports of the wrong line disappearing.
 - No automated tests. Verified manually against a couple of live (internal, IAP-gated) ArgoCD instances, since the coding agent has no browser automation access to an authenticated instance — API/DOM assumptions above were derived by reading the public argo-cd source, not by inspecting a live page. If ArgoCD upgrades change these class names/title format/API shape, this breaks silently (no error surfaced beyond a console fetch failure for the API call).
 
