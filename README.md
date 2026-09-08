@@ -12,6 +12,7 @@ This extension adds its own kind filter that understands the hierarchy: pick a k
 
 - Floating, draggable "Kind filter" widget on the Application resource tree view, with a collapse toggle. Position and collapsed state are remembered per ArgoCD instance.
 - Kind filter for v1: `All`, `Deployment`, `Service`, `ConfigMap`, `StatefulSet` — keeping each kept resource's children (ReplicaSets, Pods, etc.) visible, including their connector lines. Need another kind? Add it yourself from the widget — custom kinds are remembered per ArgoCD instance.
+- Hide low-signal kinds (Secrets, Leases, whatever you rarely need) by default across every ArgoCD instance — manage the list from the extension's Options page, or click a node's own kebab menu and pick "Hide `<Kind>` by default". Need to peek at them just this once? Tick "Show hidden-by-default kinds" in the widget — it doesn't touch your saved list.
 - Works with any ArgoCD instance you choose — nothing is hardcoded. You opt in per host from the toolbar popup, and Chrome only ever grants the extension access to the hosts you explicitly add.
 
 ## Installing (manual, for now)
@@ -35,4 +36,4 @@ The author is currently working on getting this extension published to the offic
 
 ## Status
 
-Early days — single-select kind filter, three kinds supported, no automated tests yet. See [LLM.md](LLM.md) if you're a contributor (human or AI) looking for the full technical background, the ArgoCD internals this relies on, and known limitations.
+Early days — single-select kind filter, no automated tests yet. See [LLM.md](LLM.md) if you're a contributor (human or AI) looking for the full technical background, the ArgoCD internals this relies on, and known limitations.

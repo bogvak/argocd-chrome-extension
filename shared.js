@@ -1,4 +1,5 @@
 export const CONTENT_SCRIPT_ID = "argocd-kind-filter";
+export const PAGE_INTERCEPTOR_SCRIPT_ID = "argocd-kind-filter-page-interceptor";
 
 export function normalizeHost(raw) {
   if (!raw) return null;
@@ -38,19 +39,49 @@ export async function reconcileContentScripts() {
     await setStoredHosts(activeHosts);
   }
 
-  await chrome.scripting.unregisterContentScripts({ ids: [CONTENT_SCRIPT_ID] }).catch(() => {});
+  const scripts = activeHosts.length
+    ? [
+        {
+          id: CONTENT_SCRIPT_ID,
+          matches: activeHosts.map(hostToPattern),
+          js: ["content.js"],
+          css: ["content.css"],
+          runAt: "document_idle",
+        },
+        {
+          // MAIN world + document_start: has to patch window.EventSource
+          // before ArgoCD's own bundle runs and opens its first resource-tree
+          // stream. Isolated-world content.js can't reach window.EventSource
+          // at all — MAIN and isolated worlds don't share JS globals, only
+          // the DOM (which is how content.js and this script talk to each
+          // other, via window.postMessage — see content.js/page-interceptor.js).
+          id: PAGE_INTERCEPTOR_SCRIPT_ID,
+          matches: activeHosts.map(hostToPattern),
+          js: ["page-interceptor.js"],
+          world: "MAIN",
+          runAt: "document_start",
+        },
+      ]
+    : [];
 
-  if (activeHosts.length) {
-    await chrome.scripting.registerContentScripts([
-      {
-        id: CONTENT_SCRIPT_ID,
-        matches: activeHosts.map(hostToPattern),
-        js: ["content.js"],
-        css: ["content.css"],
-        runAt: "document_idle",
-      },
-    ]);
+  // registerContentScripts() throws (and registers NOTHING, not even the
+  // scripts that were fine) if any given id is already registered — which
+  // happens easily here since this runs on every host add/remove, every
+  // onInstalled/onStartup. Checking what's actually registered first and
+  // routing each script to register vs. update accordingly avoids ever
+  // hitting that all-or-nothing failure.
+  const existingIds = new Set((await chrome.scripting.getRegisteredContentScripts()).map((s) => s.id));
+  const scriptIds = new Set(scripts.map((s) => s.id));
+
+  const idsToRemove = [...existingIds].filter((id) => !scriptIds.has(id));
+  if (idsToRemove.length) {
+    await chrome.scripting.unregisterContentScripts({ ids: idsToRemove }).catch(() => {});
   }
+
+  const toUpdate = scripts.filter((s) => existingIds.has(s.id));
+  const toRegister = scripts.filter((s) => !existingIds.has(s.id));
+  if (toUpdate.length) await chrome.scripting.updateContentScripts(toUpdate);
+  if (toRegister.length) await chrome.scripting.registerContentScripts(toRegister);
 
   return activeHosts;
 }

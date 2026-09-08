@@ -1,0 +1,31 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>ArgoCD UI Enhancer — Options</title>
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <h1>Hidden by default</h1>
+    <p>
+      Kinds listed here are hidden from the resource tree by default, on every ArgoCD
+      instance. Pick the kind explicitly from the widget's dropdown to view it anyway.
+    </p>
+
+    <div class="add-row">
+      <input id="kind-input" type="text" placeholder="Add kind (e.g. Secret)" />
+      <button id="add-btn" type="button">+</button>
+    </div>
+
+    <ul id="kind-list"></ul>
+
+    <h1>Debugging</h1>
+    <p>Logs each step of the kind filter (posted config, intercepted streams) to the ArgoCD tab's own console, prefixed <code>[argocd-ui-enhancer]</code>. Off by default — leave it off unless you're actually diagnosing something.</p>
+    <label class="checkbox-row">
+      <input id="debug-logging-checkbox" type="checkbox" />
+      Enable debug logging
+    </label>
+
+    <script src="options.js"></script>
+  </body>
+</html>

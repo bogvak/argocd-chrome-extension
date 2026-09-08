@@ -23,6 +23,10 @@
     "service_worker": "background.js",
     "type": "module"
   },
-  "permissions": ["storage", "scripting"],
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "permissions": ["storage", "scripting", "activeTab"],
   "optional_host_permissions": ["https://*/*"]
 }

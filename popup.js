@@ -26,6 +26,16 @@ async function injectIntoTab(tabId) {
   try {
     await chrome.scripting.insertCSS({ target: { tabId }, files: ["content.css"] });
     await chrome.scripting.executeScript({ target: { tabId }, files: ["content.js"] });
+    // Best-effort: if ArgoCD's own bundle already opened its resource-tree
+    // stream before this fired (page was already loaded when the user hit
+    // "Enable"), that connection won't be filtered — it's not created via
+    // `new EventSource` again until the next navigation/reconnect. A reload
+    // guarantees the interceptor is in place from document_start.
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      files: ["page-interceptor.js"],
+      world: "MAIN",
+    });
   } catch (e) {
     // tab may have navigated away or be a restricted page; safe to ignore
   }
@@ -50,21 +60,34 @@ async function addHost(host) {
     hosts.push(normalized);
     await setStoredHosts(hosts);
   }
-  await reconcileContentScripts();
 
-  if (activeTab && activeTabHost === normalized) {
+  let reconcileFailed = false;
+  try {
+    await reconcileContentScripts();
+  } catch (e) {
+    reconcileFailed = true;
+    showError(`Permission granted, but script registration failed: ${e.message || e}`);
+    console.error("[argocd-ui-enhancer]", e);
+  }
+
+  if (!reconcileFailed && activeTab && activeTabHost === normalized) {
     await injectIntoTab(activeTab.id);
   }
 
   hostInput.value = "";
-  await renderHostList();
+  await renderHostList(); // host is already saved even if reconcile failed — keep the list in sync
 }
 
 async function removeHost(host) {
   await chrome.permissions.remove({ origins: [hostToPattern(host)] });
   const hosts = await getStoredHosts();
   await setStoredHosts(hosts.filter((h) => h !== host));
-  await reconcileContentScripts();
+  try {
+    await reconcileContentScripts();
+  } catch (e) {
+    showError(`Removed, but script re-registration failed: ${e.message || e}`);
+    console.error("[argocd-ui-enhancer]", e);
+  }
   await renderHostList();
 }
 

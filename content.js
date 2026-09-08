@@ -1,83 +1,30 @@
 (function () {
   const KINDS = ["All", "Deployment", "Service", "ConfigMap", "StatefulSet"];
   const NODE_SELECTOR = ".application-resource-tree__node";
-  const EDGE_WRAPPER_SELECTOR = ".application-resource-tree__edge";
-  const EDGE_SELECTOR = ".application-resource-tree__line";
-  const EDGE_HIDE_PADDING_PX = 6;
   const POLL_MS = 700;
   const POS_STORAGE_KEY = "argocd-ext-kf-pos";
   const COLLAPSED_STORAGE_KEY = "argocd-ext-kf-collapsed";
   const CUSTOM_KINDS_STORAGE_KEY = "argocd-ext-kf-custom-kinds";
+  const HIDDEN_KINDS_STORAGE_KEY = "argocd-ext-hidden-kinds";
+  const DEBUG_LOGGING_STORAGE_KEY = "argocd-ext-debug-logging";
+  const IGNORE_HIDDEN_STORAGE_KEY = "argocd-ext-kf-ignore-hidden";
+  const NODE_MENU_ANCHOR_SELECTOR = ".application-resource-tree__node-menu .argo-dropdown__anchor";
+  const OPEN_ACTION_MENU_SELECTOR = ".argo-dropdown__content.is-menu.opened ul";
+  const HIDE_BY_DEFAULT_ITEM_CLASS = "argocd-ext-hide-by-default-item";
 
   let selectedKind = "All";
   let customKinds = [];
-  let treeData = null; // { allNodes, childrenByParentKey }
-  let lastAppKey = null;
-  let lastHref = location.href;
-  let applyScheduled = false;
+  let hiddenKinds = []; // kinds hidden by default, shared globally via chrome.storage.local
+  let ignoreHiddenDefaults = false; // per-instance override: temporarily show hidden-by-default kinds
+  let debugLogging = false; // chrome.storage.local, off by default — see options page
+  let pendingMenuNodeInfo = null; // { kind, namespace, name } of the node whose kebab menu was last opened
 
-  function getAppInfo() {
-    const parts = location.pathname.split("/").filter(Boolean);
-    const idx = parts.indexOf("applications");
-    if (idx === -1) return null;
-    const rest = parts.slice(idx + 1);
-    if (rest.length === 0) return null;
-    if (rest.length === 1) return { namespace: null, name: rest[0] };
-    return { namespace: rest[0], name: rest[1] };
+  function log(...args) {
+    if (debugLogging) console.log(...args);
   }
 
   function nodeKey(n) {
     return `${n.kind}|${n.namespace || ""}|${n.name}`;
-  }
-
-  async function fetchTree(appInfo) {
-    const params = new URLSearchParams();
-    if (appInfo.namespace) params.set("appNamespace", appInfo.namespace);
-    const qs = params.toString();
-    const url = `/api/v1/applications/${encodeURIComponent(appInfo.name)}/resource-tree${qs ? "?" + qs : ""}`;
-    const res = await fetch(url, { credentials: "include" });
-    if (!res.ok) throw new Error(`resource-tree fetch failed: ${res.status}`);
-    return res.json();
-  }
-
-  function buildChildrenMap(tree) {
-    const allNodes = (tree.nodes || []).concat(tree.orphanedNodes || []);
-    const map = new Map();
-    for (const n of allNodes) {
-      for (const p of n.parentRefs || []) {
-        const pk = nodeKey(p);
-        if (!map.has(pk)) map.set(pk, []);
-        map.get(pk).push(nodeKey(n));
-      }
-    }
-    return { allNodes, map };
-  }
-
-  function collectDescendants(rootKey, map) {
-    const keep = new Set([rootKey]);
-    const stack = [rootKey];
-    while (stack.length) {
-      const k = stack.pop();
-      for (const c of map.get(k) || []) {
-        if (!keep.has(c)) {
-          keep.add(c);
-          stack.push(c);
-        }
-      }
-    }
-    return keep;
-  }
-
-  function computeKeepSet(kind) {
-    if (kind === "All" || !treeData) return null;
-    const { allNodes, map } = treeData;
-    const keep = new Set();
-    for (const n of allNodes) {
-      if (n.kind === kind) {
-        for (const k of collectDescendants(nodeKey(n), map)) keep.add(k);
-      }
-    }
-    return keep;
   }
 
   function parseTitle(title) {
@@ -96,117 +43,69 @@
     return info;
   }
 
-  function rectsOverlap(a, b, pad) {
-    return !(
-      a.right < b.left - pad ||
-      a.left > b.right + pad ||
-      a.bottom < b.top - pad ||
-      a.top > b.bottom + pad
-    );
+  function getAppInfo() {
+    const parts = location.pathname.split("/").filter(Boolean);
+    const idx = parts.indexOf("applications");
+    if (idx === -1) return null;
+    const rest = parts.slice(idx + 1);
+    if (rest.length === 0) return null;
+    if (rest.length === 1) return { namespace: null, name: rest[0] };
+    return { namespace: rest[0], name: rest[1] };
   }
 
-  function applyFilterNow(scrollToFirst) {
-    const keep = computeKeepSet(selectedKind);
-    const nodeEls = document.querySelectorAll(NODE_SELECTOR);
-
-    // Reset to visible first so rects reflect true layout positions
-    // (hidden elements collapse to a zero rect and can't be measured).
-    nodeEls.forEach((el) => {
-      el.style.display = "";
-    });
-
-    let firstVisible = null; // { rect } of the topmost-then-leftmost kept node
-    function trackFirstVisible(el) {
-      if (!scrollToFirst) return;
-      const rect = el.getBoundingClientRect();
-      if (
-        !firstVisible ||
-        rect.top < firstVisible.rect.top ||
-        (rect.top === firstVisible.rect.top && rect.left < firstVisible.rect.left)
-      ) {
-        firstVisible = { el, rect };
-      }
-    }
-
-    const hiddenRects = [];
-    nodeEls.forEach((el) => {
-      if (!keep) {
-        trackFirstVisible(el);
-        return;
-      }
-      const info = parseTitle(el.getAttribute("title"));
-      const isHidden = !info || !keep.has(nodeKey(info));
-      if (isHidden) {
-        hiddenRects.push(el.getBoundingClientRect());
-        el.style.display = "none";
-      } else {
-        trackFirstVisible(el);
-      }
-    });
-
-    // Line segments are grouped under one edge wrapper (right-angle routing
-    // splits an edge into horizontal/vertical/horizontal segments). Only the
-    // segments touching a node actually overlap its rect, so decide per
-    // wrapper using ALL its segments, then hide/show them together.
-    document.querySelectorAll(EDGE_WRAPPER_SELECTOR).forEach((edgeEl) => {
-      edgeEl.style.display = "";
-      if (!keep) return;
-      const lineEls = edgeEl.querySelectorAll(EDGE_SELECTOR);
-      const touchesHidden = Array.from(lineEls).some((lineEl) => {
-        const rect = lineEl.getBoundingClientRect();
-        return hiddenRects.some((hr) =>
-          rectsOverlap(rect, hr, EDGE_HIDE_PADDING_PX)
-        );
-      });
-      if (touchesHidden) edgeEl.style.display = "none";
-    });
-
-    // Hidden nodes are removed from ArgoCD's absolutely-positioned canvas
-    // layout, not reflowed, so the scroll container can be left showing a
-    // blank area where the old selection used to be. Snap it back to
-    // whichever kept node is now topmost-leftmost.
-    if (firstVisible) {
-      firstVisible.el.scrollIntoView({ block: "nearest", inline: "nearest" });
-    }
-  }
-
-  // scrollAfter: true only for an actual user-driven filter change, not for
-  // routine re-applies (tree re-render, poll) — otherwise the view would
-  // keep jumping under the user on every background refresh.
-  let pendingScrollAfterApply = false;
-  function applyFilter(scrollAfter) {
-    if (scrollAfter) pendingScrollAfterApply = true;
-    if (applyScheduled) return;
-    applyScheduled = true;
-    requestAnimationFrame(() => {
-      applyScheduled = false;
-      const scrollToFirst = pendingScrollAfterApply;
-      pendingScrollAfterApply = false;
-      applyFilterNow(scrollToFirst);
-    });
-  }
-
-  async function refreshTreeData() {
+  // ArgoCD's resource-tree *stream* only pushes a message when the backend
+  // actually refreshes/reconciles the app — it doesn't push its current
+  // state just because a new EventSource subscribed. Until that happens,
+  // what's on screen is whatever the one-shot GET returned, which
+  // page-interceptor.js doesn't filter (see LLM.md's "Graph-level
+  // filtering" — that's a deliberately accepted gap, not an oversight) —
+  // and unlike a brief flash, this can persist indefinitely, exactly what
+  // clicking ArgoCD's own "Refresh" button was observed to fix. So fire
+  // that same request ourselves rather than making the user find and click
+  // it: GET /api/v1/applications/<name>?appNamespace=<ns>&refresh=normal,
+  // same endpoint/params ArgoCD's own UI uses for a normal (not hard)
+  // refresh.
+  async function triggerRefresh() {
     const appInfo = getAppInfo();
-    if (!appInfo) {
-      treeData = null;
-      return;
-    }
+    if (!appInfo) return;
+    const params = new URLSearchParams({ refresh: "normal" });
+    if (appInfo.namespace) params.set("appNamespace", appInfo.namespace);
     try {
-      treeData = buildChildrenMap(await fetchTree(appInfo));
+      await fetch(`/api/v1/applications/${encodeURIComponent(appInfo.name)}?${params}`, {
+        credentials: "include",
+      });
+      log("[argocd-ui-enhancer] triggered app refresh to force a filtered stream push");
     } catch (e) {
-      console.error("[argocd-ui-enhancer]", e);
-      treeData = null;
+      console.error("[argocd-ui-enhancer] app refresh failed", e);
     }
   }
 
-  async function onAppMaybeChanged() {
-    const appInfo = getAppInfo();
-    const key = appInfo ? `${appInfo.namespace}|${appInfo.name}` : null;
-    if (key === lastAppKey) return;
-    lastAppKey = key;
-    await refreshTreeData();
-    applyFilter();
+  // The actual filtering happens in page-interceptor.js (MAIN world), which
+  // rewrites ArgoCD's own resource-tree API/stream responses before React
+  // ever sees the dropped nodes — so dagre lays out a fresh, already-pruned
+  // graph with no gaps, rather than this content script hiding already-
+  // rendered DOM after the fact. This just needs to tell it what the
+  // current filter is, any time that changes. postMessage is the only way
+  // across — MAIN and isolated worlds share the DOM but not JS globals, so
+  // there's no direct function call or shared state possible here.
+  function postFilterConfig() {
+    log("[argocd-ui-enhancer] posting filter config", {
+      selectedKind,
+      hiddenKinds,
+      ignoreHiddenDefaults,
+      debugLogging,
+    });
+    window.postMessage(
+      {
+        source: "argocd-ext",
+        type: "filter-config",
+        selectedKind,
+        hiddenKinds,
+        ignoreHiddenDefaults,
+        debugLogging,
+      },
+      location.origin
+    );
   }
 
   function loadJSON(key) {
@@ -244,6 +143,77 @@
     customKinds = customKinds.filter((k) => k !== kind);
     saveJSON(CUSTOM_KINDS_STORAGE_KEY, customKinds);
     if (selectedKind === kind) selectedKind = "All";
+  }
+
+  // Hidden-by-default kinds live in chrome.storage.local (not localStorage)
+  // because the options page — a separate extension page, different origin
+  // from the ArgoCD page — needs to read/write the same list.
+  function loadHiddenKinds() {
+    chrome.storage.local.get(HIDDEN_KINDS_STORAGE_KEY, (res) => {
+      hiddenKinds = Array.isArray(res[HIDDEN_KINDS_STORAGE_KEY]) ? res[HIDDEN_KINDS_STORAGE_KEY] : [];
+      postFilterConfig();
+    });
+  }
+
+  // Also chrome.storage.local (not localStorage) — same reasoning as
+  // hidden-by-default kinds, the options page needs to read/write it too.
+  function loadDebugLogging() {
+    chrome.storage.local.get(DEBUG_LOGGING_STORAGE_KEY, (res) => {
+      debugLogging = res[DEBUG_LOGGING_STORAGE_KEY] === true;
+      postFilterConfig();
+    });
+  }
+
+  function addHiddenKind(kind) {
+    if (!kind || hiddenKinds.includes(kind)) return;
+    chrome.storage.local.set({ [HIDDEN_KINDS_STORAGE_KEY]: hiddenKinds.concat(kind) });
+    // hiddenKinds itself, and the interceptor, update via the onChanged
+    // listener below — chrome.storage.onChanged fires for the writer too.
+  }
+
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== "local") return;
+    if (changes[HIDDEN_KINDS_STORAGE_KEY]) {
+      hiddenKinds = changes[HIDDEN_KINDS_STORAGE_KEY].newValue || [];
+      postFilterConfig();
+    }
+    if (changes[DEBUG_LOGGING_STORAGE_KEY]) {
+      debugLogging = changes[DEBUG_LOGGING_STORAGE_KEY].newValue === true;
+      postFilterConfig();
+    }
+  });
+
+  // ArgoCD's per-node kebab menu (`.application-resource-tree__node-menu`)
+  // renders its dropdown content into a React portal on document.body, not
+  // nested under the node — so there's no DOM ancestry from the open menu
+  // back to the node it belongs to. Capture which node's kebab was clicked
+  // (capture phase, so this runs before ArgoCD's own handler calls
+  // stopPropagation) and use that to attribute the menu that opens next.
+  function trackMenuNodeOnClick(e) {
+    const anchor = e.target.closest(NODE_MENU_ANCHOR_SELECTOR);
+    if (!anchor) return;
+    const nodeEl = anchor.closest(NODE_SELECTOR);
+    pendingMenuNodeInfo = nodeEl ? parseTitle(nodeEl.getAttribute("title")) : null;
+  }
+
+  // ArgoCD builds the menu's <ul> asynchronously (its items come from an
+  // Observable via DataLoader), so this has to run off a MutationObserver
+  // rather than right after the click — the <ul> doesn't exist yet then.
+  function injectHideByDefaultMenuItem() {
+    if (!pendingMenuNodeInfo) return;
+    const info = pendingMenuNodeInfo;
+    document.querySelectorAll(OPEN_ACTION_MENU_SELECTOR).forEach((ul) => {
+      if (!ul.children.length || ul.querySelector(`.${HIDE_BY_DEFAULT_ITEM_CLASS}`)) return;
+      const li = document.createElement("li");
+      li.className = `application-details__action-menu ${HIDE_BY_DEFAULT_ITEM_CLASS}`;
+      li.textContent = `Hide ${info.kind} by default`;
+      li.addEventListener("click", (e) => {
+        e.stopPropagation();
+        addHiddenKind(info.kind);
+        document.body.click(); // same trick ArgoCD's own menu items use to close the dropdown
+      });
+      ul.appendChild(li);
+    });
   }
 
   function makeDraggable(handleEl, boxEl) {
@@ -316,7 +286,7 @@
         removeCustomKind(k);
         renderKindOptions(select);
         renderCustomKindList(listEl, select);
-        applyFilter(true);
+        postFilterConfig();
       });
       li.appendChild(removeBtn);
 
@@ -328,6 +298,7 @@
     if (document.getElementById("argocd-ext-kind-filter")) return;
 
     customKinds = loadJSON(CUSTOM_KINDS_STORAGE_KEY) || [];
+    ignoreHiddenDefaults = loadJSON(IGNORE_HIDDEN_STORAGE_KEY) === true;
 
     const box = document.createElement("div");
     box.id = "argocd-ext-kind-filter";
@@ -362,9 +333,23 @@
     renderKindOptions(select);
     select.addEventListener("change", () => {
       selectedKind = select.value;
-      applyFilter(true);
+      postFilterConfig();
     });
     body.appendChild(select);
+
+    const ignoreHiddenRow = document.createElement("label");
+    ignoreHiddenRow.className = "argocd-ext-kf__ignore-hidden-row";
+    const ignoreHiddenCheckbox = document.createElement("input");
+    ignoreHiddenCheckbox.type = "checkbox";
+    ignoreHiddenCheckbox.checked = ignoreHiddenDefaults;
+    ignoreHiddenCheckbox.addEventListener("change", () => {
+      ignoreHiddenDefaults = ignoreHiddenCheckbox.checked;
+      saveJSON(IGNORE_HIDDEN_STORAGE_KEY, ignoreHiddenDefaults);
+      postFilterConfig();
+    });
+    ignoreHiddenRow.appendChild(ignoreHiddenCheckbox);
+    ignoreHiddenRow.appendChild(document.createTextNode(" Show hidden-by-default kinds"));
+    body.appendChild(ignoreHiddenRow);
 
     const addRow = document.createElement("div");
     addRow.className = "argocd-ext-kf__add-row";
@@ -413,23 +398,34 @@
     }
 
     makeDraggable(header, box);
+
+    postFilterConfig();
   }
 
   function init() {
+    log("[argocd-ui-enhancer] content script loaded");
     createWidget();
-    onAppMaybeChanged();
+    loadHiddenKinds();
+    loadDebugLogging();
+    triggerRefresh();
+    document.addEventListener("click", trackMenuNodeOnClick, true);
 
-    new MutationObserver(() => applyFilter()).observe(document.body, {
+    new MutationObserver(() => injectHideByDefaultMenuItem()).observe(document.body, {
       childList: true,
       subtree: true,
     });
 
+    // ArgoCD is a client-rendered SPA — no real navigation event fires when
+    // switching between apps, hence the href poll. Re-triggers the refresh
+    // on every app switch (and on revisiting the same app), since each is a
+    // fresh EventSource subscription that needs its own push.
+    let lastHref = location.href;
     setInterval(() => {
+      if (!document.getElementById("argocd-ext-kind-filter")) createWidget();
       if (location.href !== lastHref) {
         lastHref = location.href;
-        onAppMaybeChanged();
+        triggerRefresh();
       }
-      if (!document.getElementById("argocd-ext-kind-filter")) createWidget();
     }, POLL_MS);
   }
 
