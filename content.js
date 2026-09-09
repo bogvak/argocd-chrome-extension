@@ -6,6 +6,7 @@
   const COLLAPSED_STORAGE_KEY = "argocd-ext-kf-collapsed";
   const CUSTOM_KINDS_STORAGE_KEY = "argocd-ext-kf-custom-kinds";
   const HIDDEN_KINDS_STORAGE_KEY = "argocd-ext-hidden-kinds";
+  const HIDE_CHILDLESS_RS_STORAGE_KEY = "argocd-ext-hide-childless-replicasets";
   const DEBUG_LOGGING_STORAGE_KEY = "argocd-ext-debug-logging";
   const IGNORE_HIDDEN_STORAGE_KEY = "argocd-ext-kf-ignore-hidden";
   const NODE_MENU_ANCHOR_SELECTOR = ".application-resource-tree__node-menu .argo-dropdown__anchor";
@@ -15,6 +16,7 @@
   let selectedKind = "All";
   let customKinds = [];
   let hiddenKinds = []; // kinds hidden by default, shared globally via chrome.storage.local
+  let hideChildlessReplicaSets = true; // chrome.storage.local, global, on by default — see options page
   let ignoreHiddenDefaults = false; // per-instance override: temporarily show hidden-by-default kinds
   let debugLogging = false; // chrome.storage.local, off by default — see options page
   let pendingMenuNodeInfo = null; // { kind, namespace, name } of the node whose kebab menu was last opened
@@ -93,6 +95,7 @@
       selectedKind,
       hiddenKinds,
       ignoreHiddenDefaults,
+      hideChildlessReplicaSets,
       debugLogging,
     });
     window.postMessage(
@@ -102,6 +105,7 @@
         selectedKind,
         hiddenKinds,
         ignoreHiddenDefaults,
+        hideChildlessReplicaSets,
         debugLogging,
       },
       location.origin
@@ -157,6 +161,17 @@
 
   // Also chrome.storage.local (not localStorage) — same reasoning as
   // hidden-by-default kinds, the options page needs to read/write it too.
+  // Defaults to true (unset), so a fresh install hides childless
+  // ReplicaSets without the user having to opt in first.
+  function loadHideChildlessReplicaSets() {
+    chrome.storage.local.get(HIDE_CHILDLESS_RS_STORAGE_KEY, (res) => {
+      hideChildlessReplicaSets = res[HIDE_CHILDLESS_RS_STORAGE_KEY] !== false;
+      postFilterConfig();
+    });
+  }
+
+  // Also chrome.storage.local (not localStorage) — same reasoning as
+  // hidden-by-default kinds, the options page needs to read/write it too.
   function loadDebugLogging() {
     chrome.storage.local.get(DEBUG_LOGGING_STORAGE_KEY, (res) => {
       debugLogging = res[DEBUG_LOGGING_STORAGE_KEY] === true;
@@ -175,6 +190,10 @@
     if (area !== "local") return;
     if (changes[HIDDEN_KINDS_STORAGE_KEY]) {
       hiddenKinds = changes[HIDDEN_KINDS_STORAGE_KEY].newValue || [];
+      postFilterConfig();
+    }
+    if (changes[HIDE_CHILDLESS_RS_STORAGE_KEY]) {
+      hideChildlessReplicaSets = changes[HIDE_CHILDLESS_RS_STORAGE_KEY].newValue !== false;
       postFilterConfig();
     }
     if (changes[DEBUG_LOGGING_STORAGE_KEY]) {
@@ -406,6 +425,7 @@
     log("[argocd-ui-enhancer] content script loaded");
     createWidget();
     loadHiddenKinds();
+    loadHideChildlessReplicaSets();
     loadDebugLogging();
     triggerRefresh();
     document.addEventListener("click", trackMenuNodeOnClick, true);

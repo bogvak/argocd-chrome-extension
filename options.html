@@ -19,6 +19,17 @@
 
     <ul id="kind-list"></ul>
 
+    <h1>ReplicaSets</h1>
+    <p>
+      A ReplicaSet with no Pods is almost always an old, scaled-down revision ArgoCD keeps
+      around for rollback history rather than anything currently running. Hidden by default;
+      select "ReplicaSet" in the widget's kind dropdown to view them anyway.
+    </p>
+    <label class="checkbox-row">
+      <input id="hide-childless-rs-checkbox" type="checkbox" />
+      Hide ReplicaSets with no descendants
+    </label>
+
     <h1>Debugging</h1>
     <p>Logs each step of the kind filter (posted config, intercepted streams) to the ArgoCD tab's own console, prefixed <code>[argocd-ui-enhancer]</code>. Off by default — leave it off unless you're actually diagnosing something.</p>
     <label class="checkbox-row">

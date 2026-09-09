@@ -1,9 +1,11 @@
 const HIDDEN_KINDS_STORAGE_KEY = "argocd-ext-hidden-kinds";
+const HIDE_CHILDLESS_RS_STORAGE_KEY = "argocd-ext-hide-childless-replicasets";
 const DEBUG_LOGGING_STORAGE_KEY = "argocd-ext-debug-logging";
 
 const listEl = document.getElementById("kind-list");
 const inputEl = document.getElementById("kind-input");
 const addBtn = document.getElementById("add-btn");
+const hideChildlessRsCheckbox = document.getElementById("hide-childless-rs-checkbox");
 const debugLoggingCheckbox = document.getElementById("debug-logging-checkbox");
 
 function loadHiddenKinds(cb) {
@@ -54,6 +56,10 @@ inputEl.addEventListener("keydown", (e) => {
   if (e.key === "Enter") addKind();
 });
 
+hideChildlessRsCheckbox.addEventListener("change", () => {
+  chrome.storage.local.set({ [HIDE_CHILDLESS_RS_STORAGE_KEY]: hideChildlessRsCheckbox.checked });
+});
+
 debugLoggingCheckbox.addEventListener("change", () => {
   chrome.storage.local.set({ [DEBUG_LOGGING_STORAGE_KEY]: debugLoggingCheckbox.checked });
 });
@@ -66,12 +72,18 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (changes[HIDDEN_KINDS_STORAGE_KEY]) {
     render(changes[HIDDEN_KINDS_STORAGE_KEY].newValue || []);
   }
+  if (changes[HIDE_CHILDLESS_RS_STORAGE_KEY]) {
+    hideChildlessRsCheckbox.checked = changes[HIDE_CHILDLESS_RS_STORAGE_KEY].newValue !== false;
+  }
   if (changes[DEBUG_LOGGING_STORAGE_KEY]) {
     debugLoggingCheckbox.checked = changes[DEBUG_LOGGING_STORAGE_KEY].newValue === true;
   }
 });
 
 loadHiddenKinds(render);
+chrome.storage.local.get(HIDE_CHILDLESS_RS_STORAGE_KEY, (res) => {
+  hideChildlessRsCheckbox.checked = res[HIDE_CHILDLESS_RS_STORAGE_KEY] !== false;
+});
 chrome.storage.local.get(DEBUG_LOGGING_STORAGE_KEY, (res) => {
   debugLoggingCheckbox.checked = res[DEBUG_LOGGING_STORAGE_KEY] === true;
 });

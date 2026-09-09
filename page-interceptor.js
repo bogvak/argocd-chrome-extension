@@ -11,7 +11,13 @@
   // Off by default (see the options page) — gates every console.log in this
   // file. Declared before the first log call below, since that call needs
   // filterConfig.debugLogging to already exist (not just be about to).
-  let filterConfig = { selectedKind: "All", hiddenKinds: [], ignoreHiddenDefaults: false, debugLogging: false };
+  let filterConfig = {
+    selectedKind: "All",
+    hiddenKinds: [],
+    ignoreHiddenDefaults: false,
+    hideChildlessReplicaSets: true,
+    debugLogging: false,
+  };
   function log(...args) {
     if (filterConfig.debugLogging) console.log(...args);
   }
@@ -37,6 +43,7 @@
       selectedKind: data.selectedKind || "All",
       hiddenKinds: Array.isArray(data.hiddenKinds) ? data.hiddenKinds : [],
       ignoreHiddenDefaults: !!data.ignoreHiddenDefaults,
+      hideChildlessReplicaSets: data.hideChildlessReplicaSets !== false,
       debugLogging: !!data.debugLogging,
     };
     log("[argocd-ui-enhancer] filter config updated", filterConfig, `${activeStreams.size} active stream(s)`);
@@ -55,11 +62,11 @@
   // the chain (dagre lays out whatever graph it's handed fresh each time,
   // so this "just works" once the data is right — no compaction math needed).
   function filterTree(tree) {
-    const { selectedKind, hiddenKinds, ignoreHiddenDefaults } = filterConfig;
+    const { selectedKind, hiddenKinds, ignoreHiddenDefaults, hideChildlessReplicaSets } = filterConfig;
     // The widget's "Show hidden-by-default kinds" checkbox overrides the
     // persisted list for this pass, without touching the list itself.
     const effectiveHiddenKinds = ignoreHiddenDefaults ? [] : hiddenKinds;
-    if (selectedKind === "All" && effectiveHiddenKinds.length === 0) return tree;
+    if (selectedKind === "All" && effectiveHiddenKinds.length === 0 && !hideChildlessReplicaSets) return tree;
 
     const allNodes = (tree.nodes || []).concat(tree.orphanedNodes || []);
     const byKey = new Map(allNodes.map((n) => [nodeKey(n), n]));
@@ -93,7 +100,17 @@
       // currently selected in the filter dropdown — otherwise there'd be no
       // way to ever look at it again.
       const suppressedByDefault = effectiveHiddenKinds.includes(n.kind) && selectedKind !== n.kind;
-      return failsKindFilter || suppressedByDefault;
+      // ReplicaSets with zero descendants are almost always old, scaled-down
+      // revisions ArgoCD keeps around for rollback history, not anything
+      // currently running — same "unless explicitly selected" exception as
+      // hidden-by-default kinds above, so filtering the widget to
+      // "ReplicaSet" still shows every one of them.
+      const suppressedAsChildlessReplicaSet =
+        hideChildlessReplicaSets &&
+        n.kind === "ReplicaSet" &&
+        selectedKind !== n.kind &&
+        !(childrenByParent.get(nodeKey(n)) || []).length;
+      return failsKindFilter || suppressedByDefault || suppressedAsChildlessReplicaSet;
     }
 
     const dropped = new Set(allNodes.filter(isDropped).map(nodeKey));

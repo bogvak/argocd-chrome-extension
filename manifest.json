@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ArgoCD UI Enhancer",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Filter ArgoCD resource tree by kind, keeping children of the selected kind. Add your own ArgoCD host from the toolbar popup.",
   "action": {
     "default_popup": "popup.html",
